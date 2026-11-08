@@ -1,0 +1,74 @@
+name: User sign-in overview by IP Address
+description: |
+  This query gives a summarisation of logons performed by a user (Needs to be updated on line 11 as needed) for each IP in a given time period based on the SigninLogs and AADNonInteractiveUserSignInLogs tables This can be useful when investigating alerts for suspicious user logons such as Unfamiliar Sign-in Properties, Logon from Anonymous IP address(VPN) etc.
+  The notable query result columns are:
+  - DeviceisManaged, DeviceTrusttype: indicates if the logon from the IP involved an Azure AD registered/trusted device.
+  - StrongAuthSuccess: indicates if a strong second factor(such as 'text message', 'mobile app notification') was used for a logon from the IP.
+  - LogonResultStats: gives the number of logons for each result code and result description.
+  - RiskDetailset: gives the risk event generated for the logon attempt from the IP.
+  - LogonDetails gives the complete list of authentication attempts from the IP with the time stamp, authentication method, and result status.
+query:  |
+  union 
+      (SigninLogs
+      | extend 
+          parsed_Location = parse_json(LocationDetails), 
+          DeviceDetail1 = parse_json(DeviceDetail), 
+          Status1 = parse_json(Status)),
+      (AADNonInteractiveUserSignInLogs
+      | extend 
+          parsed_Location = parse_json(LocationDetails), 
+          DeviceDetail1 = parse_json(DeviceDetail), 
+          Status1 = parse_json(Status))
+  | where UserPrincipalName contains "<FIXME>" 
+  | extend 
+      City = tostring(parsed_Location.city), 
+      State = tostring(parsed_Location.state), 
+      DeviceisManaged = tostring(DeviceDetail1.isManaged), 
+      DeviceTrusttype = tostring(DeviceDetail1.trustType) 
+  | extend ParsedFields = iif(AuthenticationDetails != "", parse_json(AuthenticationDetails), dynamic()) 
+  | mv-expand ParsedFields
+  | extend 
+      AuthStatus = ParsedFields.succeeded, 
+      AuthMethod = ParsedFields.authenticationMethod, 
+      AuthDetail = iif(isnotempty(ParsedFields.authenticationMethodDetail), ParsedFields.authenticationMethodDetail, ParsedFields.authenticationStepResultDetail), 
+      AuthTime = tostring(ParsedFields.authenticationStepDateTime)
+  | extend 
+      StrongAuthMethod = iif(AuthMethod !in ("Password", "", "Previously satisfied") and AuthStatus =~ "true", AuthMethod, ""), 
+      StrongAuthDetail = case(AuthMethod !in ("Password", "", "Previously satisfied") and AuthStatus == "true", AuthDetail, ""), 
+      RiskDetailset = bag_pack("RiskDetails", RiskDetail, "RiskLevelDuringSignIn", RiskLevelDuringSignIn, "RiskState", RiskState)
+  | extend 
+      LogonDetails = pack("AuthTime", AuthTime, "AuthMethod", AuthMethod, "AuthStatus", AuthStatus, "AuthDetail", AuthDetail, "Result", Status1), 
+      StrongAuthSuccess = bag_pack("AuthTime", AuthTime, "StrongAuthMethod", StrongAuthMethod, "StrongAuthDetail", StrongAuthDetail, "Status", iif(isnotempty(AuthTime), "true", "")), 
+      RiskDetailset = bag_pack("RiskDetails", RiskDetail, "RiskLevelDuringSignIn", RiskLevelDuringSignIn, "RiskState", RiskState, "RiskEventTypes", RiskEventTypes), 
+      ResultDescription = strcat(Status1.additionalDetails, ". ", ResultDescription) 
+  | summarize 
+      1stAttempt = min(CreatedDateTime), 
+      LastAttempt = max(CreatedDateTime), 
+      LogonDetails = make_set(LogonDetails), 
+      StrongAuthSuccess = make_set_if(StrongAuthSuccess, isnotempty(StrongAuthMethod)), 
+      UserAgentSet = make_set(UserAgent), 
+      DeviceDetailSet = make_set(DeviceDetail1), 
+      DeviceisManaged = make_set(DeviceisManaged), 
+      DeviceTrusttype = make_set(DeviceTrusttype), 
+      AppDisplayNameSet = make_set(AppDisplayName), 
+      ClientAppUsedSet = make_set(ClientAppUsed), 
+      dcount_AuthTime = dcount(AuthTime), 
+      LogonTimeSet = make_set(AuthTime, 10), 
+      RiskDetailset = make_set_if(RiskDetailset, RiskState != "none") 
+      by IPAddress, Location, ResultType, AuthenticationRequirement, ResultDescription, City, State
+  | summarize 
+      1stAttempt = min(1stAttempt), 
+      LastAttempt = max(LastAttempt), 
+      LogonDetails = make_set(LogonDetails), 
+      StrongAuthSuccess = make_set(StrongAuthSuccess), 
+      UserAgentSet = make_set(UserAgentSet), 
+      DeviceDetailSet = make_set(DeviceDetailSet), 
+      AppDisplayNameSet = make_set(AppDisplayNameSet), 
+      LogonResultStats = make_set(pack("ResultType", ResultType, "Count", dcount_AuthTime, "AuthRequirement", AuthenticationRequirement, "ResultDetails", ResultDescription)), 
+      ClientAppUsedSet = make_set(ClientAppUsedSet), 
+      RiskDetailset = make_set(RiskDetailset), 
+      DeviceisManaged = make_set(DeviceisManaged), 
+      DeviceTrusttype = make_set(DeviceTrusttype) 
+      by IPAddress, Location, City, State
+  | project-reorder 1stAttempt, LastAttempt, IPAddress, DeviceisManaged, DeviceTrusttype, Location, City, State, StrongAuthSuccess, LogonResultStats, UserAgentSet, DeviceDetailSet, AppDisplayNameSet, ClientAppUsedSet, RiskDetailset, LogonDetails
+  | order by LastAttempt desc
