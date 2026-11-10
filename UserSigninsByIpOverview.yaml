@@ -8,7 +8,7 @@ description: |
   - RiskDetailset: gives the risk event generated for the logon attempt from the IP.
   - LogonDetails gives the complete list of authentication attempts from the IP with the time stamp, authentication method, and result status.
 query:  |
-  let startTime = ago(3d);
+  let startTime = ago(14d);
   let endTime = now();
   let accountUPN = <FIXME>; 
   union 
@@ -26,7 +26,6 @@ query:  |
           parsed_Location = parse_json(LocationDetails), 
           DeviceDetail1 = parse_json(DeviceDetail), 
           Status1 = parse_json(Status))
-  | where UserPrincipalName contains "<FIXME>" 
   | extend 
       City = tostring(parsed_Location.city), 
       State = tostring(parsed_Location.state), 
