@@ -6,7 +6,7 @@ description: |
   - StrongAuthSuccess: indicates if a strong second factor(such as 'text message', 'mobile app notification') was used for a logon from the IP.
   - LogonResultStats: gives the number of logons for each result code and result description.
   - RiskDetailset: gives the risk event generated for the logon attempt from the IP.
-  - LogonDetails gives the complete list of authentication attempts from the IP with the time stamp, authentication method, and result status.
+  - SampleLogonDetails gives the last 10 authentication attempts from the IP for each ResultType with the time stamp, authentication method, and result status.
 query:  |
   let startTime = ago(14d);
   let endTime = now();
@@ -66,7 +66,7 @@ query:  |
   | summarize 
       1stAttempt = min(1stAttempt), 
       LastAttempt = max(LastAttempt), 
-      LogonDetails = make_set(LogonDetails), 
+      SampleLogonDetails = make_set(LogonDetails), 
       StrongAuthSuccess = make_set(StrongAuthSuccess), 
       UserAgentSet = make_set(UserAgentSet), 
       DeviceDetailSet = make_set(DeviceDetailSet), 
