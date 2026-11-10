@@ -8,13 +8,20 @@ description: |
   - RiskDetailset: gives the risk event generated for the logon attempt from the IP.
   - LogonDetails gives the complete list of authentication attempts from the IP with the time stamp, authentication method, and result status.
 query:  |
+  let startTime = ago(3d);
+  let endTime = now();
+  let accountUPN = <FIXME>; 
   union 
       (SigninLogs
+      | where TimeGenerated between (startTime .. endTime)
+      | where UserPrincipalName =~ accountUPN
       | extend 
           parsed_Location = parse_json(LocationDetails), 
           DeviceDetail1 = parse_json(DeviceDetail), 
           Status1 = parse_json(Status)),
       (AADNonInteractiveUserSignInLogs
+      | where TimeGenerated between (startTime .. endTime)
+      | where UserPrincipalName =~ accountUPN
       | extend 
           parsed_Location = parse_json(LocationDetails), 
           DeviceDetail1 = parse_json(DeviceDetail), 
