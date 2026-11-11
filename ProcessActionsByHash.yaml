@@ -8,15 +8,14 @@ description: |
 query:  |
   let alertSHA1 = "FIXME";
   let alertDeviceId = "FIXME";
-  let startTime = todatetime("FIXME");
-  
+  let startTime = ago(14d);
+  let endTime = now();
   let ParentProcessSHA1 = 
       DeviceFileEvents
-      | where TimeGenerated between (datetime_add('day', -7, startTime) .. datetime_add('day', 1, startTime))
+      | where TimeGenerated between (startTime .. endTime)
       | where SHA1 == alertSHA1 
           and DeviceId == alertDeviceId
       | summarize by InitiatingProcessSHA1;
-  
   union 
       DeviceProcessEvents,
       DeviceNetworkEvents,
@@ -25,7 +24,7 @@ query:  |
       DeviceLogonEvents,
       DeviceImageLoadEvents,
       DeviceEvents
-  | where TimeGenerated between (datetime_add('day', -7, startTime) .. datetime_add('day', 1, startTime))
+      | where TimeGenerated between (startTime .. endTime)
   | where DeviceId == alertDeviceId 
       and (InitiatingProcessSHA1 == alertSHA1 or InitiatingProcessSHA1 has_any (ParentProcessSHA1))
   | extend Actor = case(
@@ -33,49 +32,79 @@ query:  |
       InitiatingProcessSHA1 == alertSHA1, "AlertProcess",
       ""
   )
-  | extend AdditionalFieldsStr = tostring(AdditionalFields)
-  | summarize by 
+  | extend SuspEventType = case(
+      (RegistryKey contains "Run" and ActionType == "RegistryValueSet") 
+          or ProcessCommandLine has_any ("at", "net", "sc", "schtask") 
+          or InitiatingProcessCommandLine has_any ("at", "net", "sc", "schtask") 
+          or (FolderPath contains @"Microsoft\Windows\Start Menu\Programs\StartUp" and ActionType startswith "File"), "Persistence",
+      ProcessCommandLine has_any ("wmi", "psexec", "bitsadmin") 
+          or InitiatingProcessCommandLine has_any ("wmi", "psexec", "bitsadmin"), "Lateral Movement",
+      ProcessCommandLine has_any ("netstat", "ping", "whoami") 
+          or InitiatingProcessCommandLine has_any ("netstat", "ping", "whoami"), "Discovery",
+      ProcessCommandLine has_any ("cmd", "powershell", "script", "mshta") 
+          or InitiatingProcessCommandLine has_any ("cmd", "powershell", "script", "mshta"), "Execution",
+      ""
+  )
+  | project-away 
+      DeviceId,
+      DeviceName,
+      InitiatingProcessAccountDomain,
+      InitiatingProcessAccountSid,
+      InitiatingProcessIntegrityLevel,
+      InitiatingProcessLogonId,
+      InitiatingProcessMD5,
+      InitiatingProcessSHA256,
+      InitiatingProcessTokenElevation,
+      InitiatingProcessFileSize,
+      InitiatingProcessVersionInfoInternalFileName,
+      MachineGroup,
+      SHA256,
+      InitiatingProcessSessionId,
+      RequestAccountDomain,
+      RequestAccountName,
+      RequestAccountSid,
+      RequestProtocol,
+      InitiatingProcessVersionInfoProductVersion,
+      ReportId,
+      Timestamp,
+      FileSize,
+      InitiatingProcessParentCreationTime,
+      InitiatingProcessCreationTime,
+      TenantId,
+      ProcessCreationTime,
+      LogonId,
+      LogonType,
+      ProcessVersionInfoProductName,
+      ProcessVersionInfoProductVersion,
+      ProcessVersionInfoInternalFileName,
+      InitiatingProcessSignerType,
+      ProcessIntegrityLevel,
+      ProcessTokenElevation,
+      MD5,
+      AccountObjectId,
+      AccountSid,
+      InitiatingProcessAccountObjectId,
+      InitiatingProcessVersionInfoProductName,
+      CreatedProcessSessionId,
+      AccountDomain,
+      AccountUpn,
+      InitiatingProcessAccountUpn
+  | project-reorder 
+      SuspEventType,
       Actor,
       TimeGenerated,
       ActionType,
-      InitiatingProcessAccountName,
       InitiatingProcessFileName,
-      InitiatingProcessParentFileName,
+      InitiatingProcessCommandLine,
       FileName,
-      FolderPath,
+      ProcessCommandLine,
       RemoteUrl,
       RemoteIP,
       RemotePort,
-      LocalIP,
-      LocalPort,
-      InitiatingProcessCommandLine,
-      ProcessCommandLine,
-      AdditionalFieldsStr,
-      SHA1,
-      InitiatingProcessSHA1
-  | order by TimeGenerated asc
-  | summarize 
-      FirstEvent = min(TimeGenerated),
-      LastEvent = max(TimeGenerated),
-      Details = make_set(
-          pack(
-              "Time", TimeGenerated,
-              "File", FileName,
-              "ProcessCommandLine", ProcessCommandLine,
-              "RemoteUrl", RemoteUrl,
-              "RemoteIP", RemoteIP,
-              "RemotePort", tostring(RemotePort),
-              "ParentProcessCmd", InitiatingProcessCommandLine,
-              "Folder", FolderPath,
-              "AdditionalFields", AdditionalFieldsStr,
-              "FileSHA1", SHA1
-          )
-      )
-      by 
-      Actor,
-      ActionType,
-      InitiatingProcessFileName,
-      InitiatingProcessSHA1,
       InitiatingProcessAccountName,
-      InitiatingProcessParentFileName
-  | order by FirstEvent asc
+      InitiatingProcessParentFileName,
+      AdditionalFields,
+      InitiatingProcessSHA1,
+      SHA1,
+      Type
+  | order by TimeGenerated asc nulls last
