@@ -1,0 +1,81 @@
+name: Process and parent actions by file hash
+description: |
+  Query to find all actions performed by a process and its parent based on the file hash observed in an alert on a specific device. 
+  This can be useful for a process alert in Defender, as that does not typically include this information. 
+  This query can be used as a quick initial check to identify actions performed by a process before moving on to the timeline view, which is more time-consuming but has richer underlying data. 
+  This query should be used to identify actions associated with a suspected malicious file that may have been invoked multiple times.
+  This query will not return certain event types that are only visible in the Timeline View in Advanced Hunting. 
+query:  |
+  let alertSHA1 = "FIXME";
+  let alertDeviceId = "FIXME";
+  let startTime = todatetime("FIXME");
+  
+  let ParentProcessSHA1 = 
+      DeviceFileEvents
+      | where TimeGenerated between (datetime_add('day', -7, startTime) .. datetime_add('day', 1, startTime))
+      | where SHA1 == alertSHA1 
+          and DeviceId == alertDeviceId
+      | summarize by InitiatingProcessSHA1;
+  
+  union 
+      DeviceProcessEvents,
+      DeviceNetworkEvents,
+      DeviceFileEvents,
+      DeviceRegistryEvents,
+      DeviceLogonEvents,
+      DeviceImageLoadEvents,
+      DeviceEvents
+  | where TimeGenerated between (datetime_add('day', -7, startTime) .. datetime_add('day', 1, startTime))
+  | where DeviceId == alertDeviceId 
+      and (InitiatingProcessSHA1 == alertSHA1 or InitiatingProcessSHA1 has_any (ParentProcessSHA1))
+  | extend Actor = case(
+      InitiatingProcessSHA1 has_any (ParentProcessSHA1), "AlertProcessParent",
+      InitiatingProcessSHA1 == alertSHA1, "AlertProcess",
+      ""
+  )
+  | extend AdditionalFieldsStr = tostring(AdditionalFields)
+  | summarize by 
+      Actor,
+      TimeGenerated,
+      ActionType,
+      InitiatingProcessAccountName,
+      InitiatingProcessFileName,
+      InitiatingProcessParentFileName,
+      FileName,
+      FolderPath,
+      RemoteUrl,
+      RemoteIP,
+      RemotePort,
+      LocalIP,
+      LocalPort,
+      InitiatingProcessCommandLine,
+      ProcessCommandLine,
+      AdditionalFieldsStr,
+      SHA1,
+      InitiatingProcessSHA1
+  | order by TimeGenerated asc
+  | summarize 
+      FirstEvent = min(TimeGenerated),
+      LastEvent = max(TimeGenerated),
+      Details = make_set(
+          pack(
+              "Time", TimeGenerated,
+              "File", FileName,
+              "ProcessCommandLine", ProcessCommandLine,
+              "RemoteUrl", RemoteUrl,
+              "RemoteIP", RemoteIP,
+              "RemotePort", tostring(RemotePort),
+              "ParentProcessCmd", InitiatingProcessCommandLine,
+              "Folder", FolderPath,
+              "AdditionalFields", AdditionalFieldsStr,
+              "FileSHA1", SHA1
+          )
+      )
+      by 
+      Actor,
+      ActionType,
+      InitiatingProcessFileName,
+      InitiatingProcessSHA1,
+      InitiatingProcessAccountName,
+      InitiatingProcessParentFileName
+  | order by FirstEvent asc
