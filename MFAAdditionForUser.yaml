@@ -1,0 +1,46 @@
+name: New MFA additions for user
+description: |
+  This query runs against the AuditLogs table to return new MFA additions for a user. 
+query:  |
+  // Replace FIXME with the target user's UPN (e.g., "user@domain.com")
+  let TargetUser = "FIXME";
+  AuditLogs
+  | where OperationName == "Update user"
+  | where TargetResources has_any ("StrongAuthenticationPhoneAppDetail", "StrongAuthenticationUserDetails")
+  | extend AccountUpn = tostring(TargetResources[0].userPrincipalName)
+  | where AccountUpn contains TargetUser
+  | extend ParsedTargetResources = parse_json(TargetResources)
+  | mv-expand ParsedTargetResources
+  | evaluate bag_unpack(ParsedTargetResources, columnsConflict='replace_source')
+  | extend modifiedProperties = column_ifexists("modifiedProperties", "")
+  | extend ParsedModifiedProps = parse_json(modifiedProperties)
+  | mv-expand bagexpansion=array ParsedModifiedProps
+  | evaluate bag_unpack(ParsedModifiedProps, columnsConflict='replace_source')
+  | extend 
+      displayName = column_ifexists("displayName", ""),
+      newValue    = column_ifexists("newValue", dynamic([])),
+      oldValue    = column_ifexists("oldValue", dynamic([]))
+  | where displayName in ("StrongAuthenticationPhoneAppDetail", "StrongAuthenticationUserDetails")
+  | extend ParsedNewValue = iif(tostring(newValue) != "[]", parse_json(newValue), dynamic([]))
+  | mv-expand ParsedNewValue
+  | extend 
+      NewDeviceName     = ParsedNewValue.DeviceName,
+      NewNumber         = ParsedNewValue.PhoneNumber,
+      LastAuthTimestamp = ParsedNewValue.LastAuthenticatedTimestamp
+  | extend ParsedOldValue = iif(tostring(oldValue) != "[]", parse_json(oldValue), dynamic([]))
+  | mv-expand ParsedOldValue
+  | extend 
+      OldDeviceName = ParsedOldValue.DeviceName,
+      OldNumber     = ParsedOldValue.PhoneNumber
+  | summarize 
+      NewMFADeviceList  = make_set(NewDeviceName),
+      NewMFANumberList  = make_set(NewNumber),
+      OldMFADeviceList  = make_set(OldDeviceName),
+      OldMFANumberList  = make_set(OldNumber),
+      LastAuthTimestamp = make_set(pack(tostring(NewDeviceName), LastAuthTimestamp))
+      by TimeGenerated, AccountUpn, displayName
+  | extend 
+      NewDeviceAdded = set_difference(NewMFADeviceList, OldMFADeviceList),
+      NewNumberAdded = set_difference(NewMFANumberList, OldMFANumberList)
+  | where array_length(NewDeviceAdded) > 0 
+      or (array_length(NewNumberAdded) > 0 and tostring(NewNumberAdded) != '[""]')
