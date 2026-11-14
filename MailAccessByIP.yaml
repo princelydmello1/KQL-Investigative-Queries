@@ -1,0 +1,63 @@
+name: Mail Items accessed by IP Address
+description: |
+  Query to find email access events from an IP Address. This query can be used to identify the emails accessed from an IP address after a successful account compromise.
+  The query correlates the URL and attachment details for each accessed email to help identify what URLs or files with sensitive data might have been accessed. 
+query:  |
+  let IPAddress = "FIXME";
+  let startTime = ago(14d);
+  let endTime = now();
+  OfficeActivity
+  | where TimeGenerated between (startTime .. endTime)
+  | where Operation contains "MailItemsAccessed"
+  | where Client_IPAddress == IPAddress
+  | mv-expand FolderItems = todynamic(Folders)
+  | extend InternetMessageId = tostring(FolderItems.FolderItems[0].InternetMessageId)
+  | project 
+      TimeGenerated,
+      Client_IPAddress,
+      InternetMessageId,
+      UserId
+  | join kind=leftouter (
+      EmailEvents
+      | extend InternetMessageId = tostring(InternetMessageId)
+      | where isnotempty(InternetMessageId)
+      | project 
+          InternetMessageId,
+          SenderFromAddress,
+          Subject,
+          NetworkMessageId
+  ) on InternetMessageId
+  | where isnotempty(NetworkMessageId)
+  | project 
+      TimeGenerated,
+      Client_IPAddress,
+      InternetMessageId,
+      SenderFromAddress,
+      Subject,
+      NetworkMessageId,
+      UserId
+  | join kind=leftouter (
+      EmailUrlInfo
+      | extend NetworkMessageId = tostring(NetworkMessageId)
+      | summarize URLs = make_list(Url) by NetworkMessageId
+  ) on NetworkMessageId
+  | join kind=leftouter (
+      EmailAttachmentInfo
+      | extend NetworkMessageId = tostring(NetworkMessageId)
+      | summarize FileNames = make_list(FileName) by NetworkMessageId
+  ) on NetworkMessageId
+  | summarize 
+      EmailDetails = make_bag(
+          pack(
+              "Time", TimeGenerated,
+              "NetworkMessageId", NetworkMessageId,
+              "InternetMessageId", InternetMessageId,
+              "URLs", tostring(URLs),
+              "Attachments", tostring(FileNames)
+          )
+      )
+      by 
+      Client_IPAddress,
+      Subject,
+      LoggedonUser = UserId,
+      SenderFromAddress
