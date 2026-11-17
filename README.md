@@ -1,8 +1,7 @@
 # KQL-Investigative-Queries
-This repo contains a list of KQL queries that are useful in investigating security incidents in Microsoft Defender/Sentinel.
+A curated collection of reusable Kusto Query Language (KQL) queries designed to accelerate security incident investigations across Microsoft Defender XDR and Microsoft Sentinel.
 
-1. **UserSigninSummaryByIp.yaml**: Summarizes all Entra logon activity for a user by IP using the SigninLogs and AADNoninteractiveUserSignInLogs tables.
-2. **UserMFAAdditions.yaml**: Identifies new MFA additions for a user using the AuditLogs table. 
-3. **EmailAccessByIP.yaml**: Identifies email access from an IP using the OfficeActivity table. 
-4. **ProcessActionsByHash.yaml**: Identifies all available actions performed by a process with a specific file hash. 
-   
+1. **UserSigninSummaryByIp.yaml**: Summarizes interactive and non-interactive Microsoft Entra ID sign-in activity for a specific user, grouped by IP address (SigninLogs, AADNoninteractiveUserSignInLogs).
+2. **UserMFAAdditions.yaml**: Identifies newly registered multi-factor authentication (MFA) methods for a target user (AuditLogs).
+3. **EmailAccessByIP.yaml**: Identifies email access events originating from a specific IP address (OfficeActivity).
+4. **ProcessActionsByHash.yaml**: Identifies all recorded process executions and related activities associated with a specific file hash (DeviceProcessEvents, DeviceEvents).
