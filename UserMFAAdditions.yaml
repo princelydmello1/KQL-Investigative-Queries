@@ -1,9 +1,11 @@
 name: New MFA additions for user
 description: |
-  This query runs against the AuditLogs table to return new MFA additions for a user. 
+  This query runs against the AuditLogs table to return new MFA additions for a user.
+  Use this query when investigating suspicious logons to identify if a new MFA method was added within the given time frame.
+  This table doesn't provide the source IP from which the MFA method was added.
 query:  |
-  // Replace FIXME with the target user's UPN (e.g., "user@domain.com")
-  let TargetUser = "FIXME";
+  // Replace <FIXME> with the target user's UPN (e.g., "user@domain.com")
+  let TargetUser = <FIXME>;
   AuditLogs
   | where OperationName == "Update user"
   | where TargetResources has_any ("StrongAuthenticationPhoneAppDetail", "StrongAuthenticationUserDetails")
