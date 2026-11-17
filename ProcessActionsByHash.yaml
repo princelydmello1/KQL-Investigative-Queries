@@ -1,18 +1,16 @@
 name: Process and parent actions by file hash
 description: |
   Query to find all actions performed by a process and its parent based on the file hash observed in an alert on a specific device. 
-  This can be useful for a process alert in Defender, as that does not typically include this information. 
-  This query can be used as a quick initial check to identify actions performed by a process before moving on to the timeline view, which is more time-consuming but has richer underlying data. 
-  This query should be used to identify actions associated with a suspected malicious file that may have been invoked multiple times.
+  This can be useful for a process alert in Defender, since that typically does not include this information. 
+  This query can serve as a quick initial check to identify actions performed by a process before moving on to the timeline view, which is more time-consuming but offers richer underlying data. 
+  This query can be used to identify actions associated with a suspected file hash that may have been invoked multiple times.
   This query will not return certain event types that are only visible in the Timeline View in Advanced Hunting. 
 query:  |
-  let alertSHA1 = "FIXME";
-  let alertDeviceId = "FIXME";
-  let startTime = ago(14d);
-  let endTime = now();
+  // Replace <FIXME1> with the file SHA1 to be investigated and <FIXME2> with the defender device id
+  let alertSHA1 = <FIXME1>;
+  let alertDeviceId = <FIXME2>;
   let ParentProcessSHA1 = 
       DeviceFileEvents
-      | where TimeGenerated between (startTime .. endTime)
       | where SHA1 == alertSHA1 
           and DeviceId == alertDeviceId
       | summarize by InitiatingProcessSHA1;
@@ -21,10 +19,8 @@ query:  |
       DeviceNetworkEvents,
       DeviceFileEvents,
       DeviceRegistryEvents,
-      DeviceLogonEvents,
       DeviceImageLoadEvents,
       DeviceEvents
-      | where TimeGenerated between (startTime .. endTime)
   | where DeviceId == alertDeviceId 
       and (InitiatingProcessSHA1 == alertSHA1 or InitiatingProcessSHA1 has_any (ParentProcessSHA1))
   | extend Actor = case(
