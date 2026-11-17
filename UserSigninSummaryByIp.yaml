@@ -1,6 +1,6 @@
 name: User sign-in overview by IP Address
 description: |
-  This query gives a summarisation of logons performed by a user (Needs to be updated on line 11 as needed) for each IP in a given time period based on the SigninLogs and AADNonInteractiveUserSignInLogs tables.
+  This query gives a summarisation of logons performed by a user for each IP in a given time period based on the SigninLogs and AADNonInteractiveUserSignInLogs tables.
   This can be useful when investigating alerts for suspicious user logons such as Unfamiliar Sign-in Properties, Logon from Anonymous IP address(VPN), etc.
   The notable query result columns are:
   - DeviceisManaged, DeviceTrusttype: indicates if the logon from the IP involved an Azure AD registered/trusted device.
