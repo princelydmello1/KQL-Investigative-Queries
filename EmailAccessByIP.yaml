@@ -1,7 +1,7 @@
 name: Mail Items accessed by IP Address
 description: |
   Query to find email access events from an IP Address. 
-  This query can be used to identify the emails accessed from an IP address after a successful account compromise.
+  This query can be used to identify the email accessed and the associated URLs and attachments from an IP address after a successful account compromise.
   The query correlates the URL and attachment details for each accessed email to help identify what URLs or files with sensitive data might have been accessed. 
 query:  |
   // Replace <FIXME> with the IP Address to be investigated
